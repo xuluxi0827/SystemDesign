@@ -1,0 +1,75 @@
+Requirements
+基本：
+给一个long url，可以generate short url （no required for unique）
+给一个short url，可以redirect to long url
+更多：
+customize short ur
+links will expire after certain time
+not predictable
+性能方面：
+high availability - no single point failure
+scalability
+real time with minimal latency
+Consistency
+
+How short is the tiny url? 
+uses base64:
+6 chars: 64 ^ 6 = 7 * 10 ^ 10 urls = 70 billions（可以用多少年？
+
+How long is the long url?
+<= 2083 chars
+total = 8 chars 随机串 + 2083 + 4记录超时 = 2095 chars
+
+QPS / capacity estimation
+DAU - 100M
+traffic - 
+Read > write 100 : 1
+假设每个用户每天有0.1个tiny请求 -
+write qps = 100M * 0.1 / 86400 ~= 100   peak write = 100 * 2 = 200urls/s
+假设每个用户每天点击1个tiny url -
+read qps = 100M * 1 /86400 ~= 1k          peak read = 20k urls/s
+storage - 
+每天产生的新的url所占储存 - 
+100M * 0.1 ~= 10M 
+每个url平均长度为500B ， total = 10M * 500B ~= 5GB
+5 years: 
+5GB * 365 * 5 = 1825GB = 7.5TB
+Bandwidth -
+write: 200urls/s * 500B = 100KB/s
+read: 100 kb * 100 = 10 MB/s
+Memory - (cache)
+Follow the 80-20 rule, meaning 20% of URLs generate 80% of traffic, we would like to cache these 20% hot URLs:
+read daily: 10 MB/s * 86400 * 20% = 170GB
+since there will be duplicated requests(same urls), so the actual memory usage will be less than 170GB
+
+APIs
+POST (long to short)
+UrlService.encode(long_url) -> createShortUrl(longUrl, optional expireMillis)
+return short url
+UrlService.decode(short_url) -> getLongUrl(shortUrl)
+if expired - return not found; else - redirect to long url
+GET return a Http redirect response 
+301 永久重定向 一次redirect 永久直接redirect，不需要访问server去拿
+302 临时重定向
+POST return short url
+
+Database design
+NOSQL: 不需要多个object之间的关系 key value pair
+table1 长短url的mapping 
+table2 用户表 pk： userid 
+
+Algorithm
+1. random 
+2. encode: long url MD5 128bit convert to base 64 21 char string substring 8 char, if collision, append random string and hash again
+问题： same url generate same short url 
+解决： append customer id and hash (if not sign in, ask user to choose a uniqueness key)
+3. key generation service 
+	提前生成好 KGS db size: 6B * 70 billions = 420GB
+	need replica
+4.range based counter (Zoo keeper) 加锁
+	
+High level diagram
+Client -> load Balance -> server -> cache -> DB
+
+
+
